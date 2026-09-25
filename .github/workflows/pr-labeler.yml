@@ -1,0 +1,52 @@
+name: Labeler
+
+# An enterprise ruleset requires this workflow on every pull request in every
+# organization of the bje enterprise (rulesets/enterprise-labeler.json). A
+# repository opts in by adding .github/labeler.yml to its default branch. A
+# repository without that file passes the check and gets no labels.
+#
+# pull_request_target gives pull requests from forks a writable token. It is
+# safe here because nothing checks out or runs pull request content: the guard
+# reads one file from the base branch, and actions/labeler reads the config and
+# the changed file list through the API. See SECURITY.md.
+on:
+  pull_request_target:
+  merge_group:
+
+permissions:
+  contents: read # read .github/labeler.yml from the base branch
+  pull-requests: write # add and remove labels on the pull request
+  # No issues: write. The labeler cannot create a label. A config that names a
+  # label the repository does not have fails the run, with a message that names
+  # the missing label.
+
+jobs:
+  label:
+    name: Label pull request
+    if: github.event_name != 'merge_group'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Find .github/labeler.yml on the base branch
+        id: config
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.sha }}
+        run: |
+          if out=$(gh api "repos/$REPO/contents/.github/labeler.yml?ref=$REF" --jq .sha 2>&1); then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          elif grep -q "HTTP 404" <<<"$out"; then
+            echo "No .github/labeler.yml on the base branch. Nothing to label."
+          else
+            echo "::error::Could not read .github/labeler.yml: $out"
+            exit 1
+          fi
+
+      - name: Label by changed files
+        if: steps.config.outputs.present == 'true'
+        uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          # Remove a configured label when the diff no longer matches it.
+          # Labels that the config does not name are left alone.
+          sync-labels: true
