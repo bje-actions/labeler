@@ -12,7 +12,7 @@ only. Each repository that wants labels adds one config file.
    For example:
 
    ```yaml
-   "plugin: gh":
+   "plugin:gh":
      - changed-files:
          - any-glob-to-any-file: "plugins/gh/**"
    ```
